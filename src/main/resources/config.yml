@@ -1,0 +1,36 @@
+actions:
+  staff:
+    permission: "shstaffrtp.use"
+    world: ["none"]
+    region: "none"
+    commands:
+      - "staffrtp"
+  playerToSpawn:
+    permission: "none"
+    world: ["SuperiorWorld"]
+    region: "none"
+    commands:
+      - "spawn"
+  1vs1:
+    permission: "none"
+    world: ["spawn"]
+    region: "1vs1"
+    commands: []
+  playerToIsland:
+    permission: "none"
+    world: ["spawn"]
+    region: "none"
+    commands:
+      - "is go"
+  playerToSpawnFromArena:
+    permission: "none"
+    world: ["arene"]
+    region: "none"
+    commands:
+      - "spawn"
+  playerToSpawnFromChristmas:
+    permission: "none"
+    world: ["Christmas"]
+    region: "none"
+    commands:
+      - "spawn"
