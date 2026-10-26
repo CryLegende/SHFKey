@@ -23,7 +23,9 @@ import org.jetbrains.annotations.NotNull;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 public class SHFKey extends JavaPlugin implements Listener, CommandExecutor {
@@ -32,6 +34,8 @@ public class SHFKey extends JavaPlugin implements Listener, CommandExecutor {
     // Gestion du data.yml
     private File dataFile;
     private FileConfiguration dataConfig;
+    // Joueurs ayant désactivé le plugin, en mémoire pour ne pas relire data.yml à chaque touche
+    private final Set<String> disabledPlayers = new LinkedHashSet<>();
 
     @Override
     public void onEnable() {
@@ -75,6 +79,8 @@ public class SHFKey extends JavaPlugin implements Listener, CommandExecutor {
             }
         }
         dataConfig = YamlConfiguration.loadConfiguration(dataFile);
+        disabledPlayers.clear();
+        disabledPlayers.addAll(dataConfig.getStringList("disabled-players"));
     }
 
     private void saveData() {
@@ -86,23 +92,19 @@ public class SHFKey extends JavaPlugin implements Listener, CommandExecutor {
     }
 
     public boolean isPluginEnabledFor(Player player) {
-        List<String> disabledPlayers = dataConfig.getStringList("disabled-players");
         return !disabledPlayers.contains(player.getUniqueId().toString());
     }
 
     public void setPluginEnabledFor(Player player, boolean enabled) {
-        List<String> disabledPlayers = dataConfig.getStringList("disabled-players");
         String uuid = player.getUniqueId().toString();
 
         if (enabled) {
             disabledPlayers.remove(uuid);
         } else {
-            if (!disabledPlayers.contains(uuid)) {
-                disabledPlayers.add(uuid);
-            }
+            disabledPlayers.add(uuid);
         }
 
-        dataConfig.set("disabled-players", disabledPlayers);
+        dataConfig.set("disabled-players", new ArrayList<>(disabledPlayers));
         saveData();
     }
 
