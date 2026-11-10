@@ -110,6 +110,9 @@ public class SHFKey extends JavaPlugin implements Listener, CommandExecutor {
         } catch (Exception | LinkageError e) {
             if (db != null) db.close();
             getLogger().log(Level.SEVERE, "SHNetwork présent mais inutilisable, liste des joueurs désactivés locale à ce serveur : " + e);
+            // la liste de data.yml reste la référence
+            disabledPlayers.clear();
+            disabledPlayers.addAll(dataConfig.getStringList("disabled-players"));
         }
     }
 
