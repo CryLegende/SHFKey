@@ -1,3 +1,35 @@
+# ======================================================================== #
+# SHFKey
+#
+# Plugin : la touche F (échange main principale / secondaire) lance des commandes selon la permission, le monde
+# et la région WorldGuard du joueur. La première action dont les conditions sont remplies s'exécute, l'échange
+# vanilla est annulé. Un administrateur peut désactiver SHFKey pour un joueur. Avec SHNetwork, cette liste suit
+# les joueurs d'un serveur à l'autre (voir la section 'reseau' en bas du fichier).
+#
+# Actions (section 'actions', dans l'ordre) :
+#   permission   Permission requise, ou 'none'.
+#   world        Mondes concernés (liste), ou 'none'.
+#   region       Région WorldGuard où le joueur doit se trouver, ou 'none'.
+#   asOP         true : la commande est lancée par la console et demande un joueur opérateur ; false : par le joueur.
+#   commands     Commandes lancées (sans /), %player% = pseudo du joueur.
+#
+# Sur un réseau de serveurs, les actions ne lancent que des commandes : 'is go' est interceptée par le pont
+# SuperiorSkyblock2 (SHSkyBridge), qui envoie le joueur sur le serveur de son île ; 'spawn' ramène au serveur
+# qui héberge le spawn. Rien de plus à régler ici, chaque serveur garde la même liste d'actions.
+#
+# Commandes :
+#   /shfkey toggle <joueur>   Active ou désactive SHFKey pour un joueur (même connecté à un autre serveur).
+#   /shfkey import            Mode réseau : reprend data.yml dans la base partagée (une seule fois).
+#
+# Permission :
+#   shfkey.admin              Utiliser /shfkey.
+#
+# Placeholder : %shfkey_is_enabled% = true / false.
+#
+# Les messages du mode réseau sont dans 'messages.yml'.
+#
+# ======================================================================== #
+
 actions:
   staff:
     permission: "shstaffrtp.use"
@@ -34,3 +66,20 @@ actions:
     region: "none"
     commands:
       - "spawn"
+
+# Mode réseau. Actif seulement si SHNetwork est installé et 'actif' vaut true : les joueurs pour qui SHFKey est
+# désactivé sont alors dans la base partagée (table shfkey_disabled : une ligne par joueur) et relus à l'arrivée du
+# joueur sur un serveur. Sans SHNetwork, rien de ceci n'est utilisé et la liste reste dans data.yml.
+# Demande un redémarrage.
+reseau:
+  actif: true
+  # Durée maximale, en secondes, pendant laquelle on attend que l'autre serveur ait fini de sauvegarder
+  # le joueur avant de relire son état
+  attente-max-secondes: 10
+  base-de-donnees:
+    url: "jdbc:mariadb://127.0.0.1:3306/bo_net"
+    utilisateur: shfkey
+    mot-de-passe: CHANGE_ME
+    # Délai maximal de connexion et de réponse de la base, en millisecondes. Une base qui ne répond pas
+    # laisse le joueur avec SHFKey actif.
+    delai-ms: 3000

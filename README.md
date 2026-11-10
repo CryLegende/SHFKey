@@ -20,13 +20,26 @@ Utilisé sur : **Opale**.
 
 ## Dépendances
 
-- Optionnelles : `WorldGuard`, `PlaceholderAPI`
+- Optionnelles : `WorldGuard`, `PlaceholderAPI`, `SHNetwork` (mode réseau)
+
+## Mode réseau
+
+Avec **SHNetwork** installé (et `reseau.actif: true`, valeur par défaut), plusieurs serveurs de jeu partagent la liste des joueurs pour qui SHFKey est désactivé :
+
+- la liste est dans MariaDB (table `shfkey_disabled`, une ligne par joueur désactivé) ; `/shfkey toggle` ajoute ou retire cette seule ligne, sur un fil à part ;
+- `/shfkey toggle <joueur>` marche aussi pour un joueur connecté à un autre serveur : l'état est basculé en base, puis son serveur est prévenu par le bus (sujet `shfkey`) ; un joueur inconnu du réseau répond toujours « Joueur introuvable. » ;
+- au départ d'un joueur, SHNetwork attend que ces écritures soient finies ;
+- à son arrivée sur l'autre serveur, son état est relu en base une fois le départ confirmé ; d'ici là SHFKey est actif (valeur par défaut, jamais écrite en base) ;
+- `data.yml` n'est plus lu ni écrit : `/shfkey import` le reprend une fois dans la base, sans écraser ce qui y est déjà ;
+- les actions ne lancent que des commandes : `is go` est interceptée par le pont SuperiorSkyblock2 (SHSkyBridge), qui envoie le joueur sur le serveur de son île avec le point d'arrivée, et `spawn` ramène au serveur qui héberge le spawn. Chaque serveur garde la même liste d'actions, rien d'autre à régler.
+
+Sans SHNetwork, ou sans les clés `reseau` dans la configuration, le plugin se comporte comme avant : liste locale dans `data.yml`. Si la base est injoignable, le joueur garde SHFKey actif. La table se crée toute seule au démarrage, ou à la main avec `sql/schema.sql`.
 
 ## Commandes
 
 | Commande | Alias | Description | Permission |
 |---|---|---|---|
-| `/shfkey` | — | Commande principale pour gérer SHFKey | `shfkey.admin` |
+| `/shfkey` | — | Commande principale pour gérer SHFKey (`toggle <joueur>`, `import`) | `shfkey.admin` |
 
 ## Configuration
 
@@ -34,7 +47,8 @@ Fichiers par défaut repris du serveur (secrets remplacés par `CHANGE_ME`). Cli
 
 <pre>
 plugins/SHFKey/
-└── <a href="src/main/resources/config.yml">config.yml</a>
+├── <a href="src/main/resources/config.yml">config.yml</a>
+└── <a href="src/main/resources/messages.yml">messages.yml</a>
 </pre>
 
 ## Compilation

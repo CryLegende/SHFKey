@@ -6,6 +6,10 @@ import com.sk89q.worldguard.protection.regions.RegionContainer;
 import com.sk89q.worldguard.protection.managers.RegionManager;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
+import org.Cry_Legende.sHFKey.network.DisabledDatabase;
+import org.Cry_Legende.sHFKey.network.NetworkFKey;
+import org.Cry_Legende.sHFKey.network.NetworkLink;
+import org.Cry_Legende.sHFKey.network.ShNetworkLink;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
@@ -22,11 +26,18 @@ import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.logging.Level;
 
 public class SHFKey extends JavaPlugin implements Listener, CommandExecutor {
     private RegionContainer regionContainer;
@@ -35,7 +46,11 @@ public class SHFKey extends JavaPlugin implements Listener, CommandExecutor {
     private File dataFile;
     private FileConfiguration dataConfig;
     // Joueurs ayant désactivé le plugin, en mémoire pour ne pas relire data.yml à chaque touche
-    private final Set<String> disabledPlayers = new LinkedHashSet<>();
+    // (lu aussi par PlaceholderAPI, qui peut interroger depuis un autre fil)
+    private final Set<String> disabledPlayers = Collections.synchronizedSet(new LinkedHashSet<>());
+    // Non nul seulement avec SHNetwork : les joueurs désactivés vivent alors dans la base partagée
+    private NetworkFKey network;
+    private YamlConfiguration messages;
 
     @Override
     public void onEnable() {
@@ -44,6 +59,8 @@ public class SHFKey extends JavaPlugin implements Listener, CommandExecutor {
 
         // Initialisation data.yml
         createDataFile();
+        loadMessages();
+        enableNetwork();
 
         // Events & Commandes
         getServer().getPluginManager().registerEvents(this, this);
@@ -58,6 +75,59 @@ public class SHFKey extends JavaPlugin implements Listener, CommandExecutor {
         } else {
             getLogger().warning("PlaceholderAPI non trouvé. Les placeholders ne fonctionneront pas.");
         }
+    }
+
+    @Override
+    public void onDisable() {
+        if (network != null) {
+            network.stop();
+        }
+    }
+
+    /**
+     * Passe en mode réseau si SHNetwork est installé et 'reseau.actif' est vrai. Les classes qui touchent à SHNetwork
+     * ne sont chargées qu'ici : sans lui, le plugin se comporte exactement comme avant.
+     */
+    private void enableNetwork() {
+        if (!getConfig().getBoolean("reseau.actif", true)) return;
+        if (!Bukkit.getPluginManager().isPluginEnabled("SHNetwork")) return;
+        DisabledDatabase db = null;
+        try {
+            NetworkLink link = ShNetworkLink.open();
+            db = new DisabledDatabase(
+                getConfig().getString("reseau.base-de-donnees.url"),
+                getConfig().getString("reseau.base-de-donnees.utilisateur"),
+                getConfig().getString("reseau.base-de-donnees.mot-de-passe"),
+                Math.max(250, getConfig().getInt("reseau.base-de-donnees.delai-ms", 3000)));
+            db.createTable();
+            Duration wait = Duration.ofSeconds(Math.max(1, getConfig().getInt("reseau.attente-max-secondes", 10)));
+            NetworkFKey net = new NetworkFKey(this, disabledPlayers, db, link, wait);
+            // la base fait foi : la liste de data.yml n'est reprise que par /shfkey import
+            disabledPlayers.clear();
+            net.start();
+            network = net;
+            getLogger().info("SHNetwork détecté : la liste des joueurs désactivés est partagée entre les serveurs (base partagée).");
+        } catch (Exception | LinkageError e) {
+            if (db != null) db.close();
+            getLogger().log(Level.SEVERE, "SHNetwork présent mais inutilisable, liste des joueurs désactivés locale à ce serveur : " + e);
+        }
+    }
+
+    /** messages.yml, avec les valeurs du jar pour toute clé absente du fichier du serveur. */
+    private void loadMessages() {
+        File file = new File(getDataFolder(), "messages.yml");
+        if (!file.exists()) saveResource("messages.yml", false);
+        messages = YamlConfiguration.loadConfiguration(file);
+        try (InputStreamReader defaults = new InputStreamReader(Objects.requireNonNull(getResource("messages.yml")), StandardCharsets.UTF_8)) {
+            messages.setDefaults(YamlConfiguration.loadConfiguration(defaults));
+        } catch (Exception e) {
+            getLogger().log(Level.WARNING, "messages.yml de référence illisible : " + e.getMessage());
+        }
+    }
+
+    /** Texte de messages.yml, couleurs appliquées. */
+    private String getMessage(String key) {
+        return ChatColor.translateAlternateColorCodes('&', messages.getString(key, key));
     }
 
     private void initializeWorldGuard() {
@@ -96,6 +166,10 @@ public class SHFKey extends JavaPlugin implements Listener, CommandExecutor {
     }
 
     public void setPluginEnabledFor(Player player, boolean enabled) {
+        if (network != null) {
+            network.set(player.getUniqueId(), !enabled);
+            return;
+        }
         String uuid = player.getUniqueId().toString();
 
         if (enabled) {
@@ -104,8 +178,58 @@ public class SHFKey extends JavaPlugin implements Listener, CommandExecutor {
             disabledPlayers.add(uuid);
         }
 
-        dataConfig.set("disabled-players", new ArrayList<>(disabledPlayers));
+        List<String> snapshot;
+        synchronized (disabledPlayers) {
+            snapshot = new ArrayList<>(disabledPlayers);
+        }
+        dataConfig.set("disabled-players", snapshot);
         saveData();
+    }
+
+    /** Message de /shfkey toggle : le nouvel état de SHFKey pour le joueur visé. */
+    private String toggleStatus(boolean nowEnabled, String playerName) {
+        String status = nowEnabled ? ChatColor.GREEN + "activé" : ChatColor.RED + "désactivé";
+        return ChatColor.YELLOW + "SHFKey a été " + status + ChatColor.YELLOW + " pour " + playerName;
+    }
+
+    /** /shfkey toggle avec SHNetwork : le joueur peut être sur ce serveur ou sur un autre. */
+    private void toggleOnNetwork(CommandSender sender, String targetName) {
+        Player target = Bukkit.getPlayer(targetName);
+        if (target != null) {
+            boolean nowDisabled = network.toggle(target.getUniqueId());
+            sender.sendMessage(toggleStatus(!nowDisabled, target.getName()));
+            return;
+        }
+        Optional<NetworkLink.Target> remote = network.find(targetName);
+        if (remote.isEmpty()) {
+            sender.sendMessage(ChatColor.RED + "Joueur introuvable.");
+            return;
+        }
+        String name = remote.get().name();
+        network.toggleRemote(remote.get().uuid(), (nowDisabled, error) -> getServer().getScheduler().runTask(this, () -> {
+            if (error != null) {
+                sender.sendMessage(getMessage("reseau-erreur").replace("%erreur%", error));
+            } else {
+                sender.sendMessage(toggleStatus(!nowDisabled, name));
+            }
+        }));
+    }
+
+    /** /shfkey import : reprend la liste de data.yml dans la base partagée (une fois, sans écraser ce qui y est déjà). */
+    private void importDisabledPlayers(CommandSender sender) {
+        if (network == null) {
+            sender.sendMessage(getMessage("reseau-inactif"));
+            return;
+        }
+        network.importFile(dataFile.toPath(), (counts, error) -> {
+            if (error != null) {
+                sender.sendMessage(getMessage("reseau-import-erreur").replace("%erreur%", error));
+            } else {
+                sender.sendMessage(getMessage("reseau-import")
+                    .replace("%ajoutes%", String.valueOf(counts[0]))
+                    .replace("%deja%", String.valueOf(counts[1])));
+            }
+        });
     }
 
     // --- COMMANDE ---
@@ -114,6 +238,16 @@ public class SHFKey extends JavaPlugin implements Listener, CommandExecutor {
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
         if (!sender.hasPermission("shfkey.admin")) {
             sender.sendMessage(ChatColor.RED + "Vous n'avez pas la permission.");
+            return true;
+        }
+
+        if (args.length == 1 && args[0].equalsIgnoreCase("import")) {
+            importDisabledPlayers(sender);
+            return true;
+        }
+
+        if (args.length == 2 && args[0].equalsIgnoreCase("toggle") && network != null) {
+            toggleOnNetwork(sender, args[1]);
             return true;
         }
 
@@ -132,7 +266,7 @@ public class SHFKey extends JavaPlugin implements Listener, CommandExecutor {
             return true;
         }
 
-        sender.sendMessage(ChatColor.YELLOW + "Usage: /shfkey toggle <joueur>");
+        sender.sendMessage(ChatColor.YELLOW + (network != null ? "Usage: /shfkey <toggle <joueur>|import>" : "Usage: /shfkey toggle <joueur>"));
         return true;
     }
 

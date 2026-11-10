@@ -1,0 +1,6 @@
+# Messages du mode réseau de SHFKey (ceux de /shfkey toggle sont dans le code).
+# Variables : %ajoutes% et %deja% (import), %erreur%.
+reseau-inactif: "&7&l« &e&lSH &8&l» &7Le mode réseau n'est &epas actif &7sur ce serveur."
+reseau-import: "&7&l« &a&lSH &8&l» &7Import terminé : &a%ajoutes% &7joueur(s) ajouté(s) à la base, &e%deja% &7déjà présent(s)."
+reseau-import-erreur: "&7&l« &c&lSH &8&l» &7Import impossible : &c%erreur%&7."
+reseau-erreur: "&7&l« &c&lSH &8&l» &7Base partagée injoignable : &c%erreur%&7."
