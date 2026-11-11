@@ -12,6 +12,28 @@ libraries:
 
 commands:
   shfkey:
-    description: Commande principale pour gérer SHFKey
-    usage: /shfkey toggle <player> | import
-    permission: shfkey.admin
+    description: Administration de SHFKey (toggle, import, reload, list).
+    usage: /shfkey <toggle|import|reload|list>
+    permission: shfkey.admin.toggle;shfkey.admin.import;shfkey.admin.reload;shfkey.admin.list
+
+permissions:
+  shfkey.admin:
+    description: Toutes les commandes d'administration de SHFKey.
+    default: op
+    children:
+      shfkey.admin.toggle: true
+      shfkey.admin.import: true
+      shfkey.admin.reload: true
+      shfkey.admin.list: true
+  shfkey.admin.toggle:
+    description: /shfkey toggle <joueur>
+    default: op
+  shfkey.admin.import:
+    description: /shfkey import (avec SHNetwork)
+    default: op
+  shfkey.admin.reload:
+    description: /shfkey reload
+    default: op
+  shfkey.admin.list:
+    description: /shfkey list
+    default: op

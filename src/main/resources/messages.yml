@@ -1,5 +1,22 @@
-# Messages du mode réseau de SHFKey (ceux de /shfkey toggle sont dans le code).
-# Variables : %ajoutes% et %deja% (import), %erreur%.
+# Messages de SHFKey. Couleurs avec &. Format des messages de commande : &7&l« &<c>&lSH &8&l» &7texte (&a succès, &e info, &c erreur).
+# Variables : %subs% (sous-commandes que l'expéditeur peut utiliser), %player%, %count%, %ajoutes% et %deja% (import), %erreur%.
+
+# /shfkey
+no-permission: "&7&l« &c&lSH &8&l» &7Vous n'avez pas la permission."
+usage: "&7&l« &e&lSH &8&l» &7Utilisation : &e/shfkey <%subs%>&7."
+usage-toggle: "&7&l« &e&lSH &8&l» &7Utilisation : &e/shfkey toggle <joueur>&7."
+player-not-found: "&7&l« &c&lSH &8&l» &cJoueur introuvable."
+toggle-enabled: "&7&l« &a&lSH &8&l» &7SHFKey a été &aactivé &7pour &e%player%&7."
+toggle-disabled: "&7&l« &a&lSH &8&l» &7SHFKey a été &cdésactivé &7pour &e%player%&7."
+reloaded: "&7&l« &a&lSH &8&l» &7Configuration et messages &arechargés&7."
+# L'ancienne configuration reste active.
+reload-failed: "&7&l« &c&lSH &8&l» &7Rechargement annulé, l'ancienne configuration reste active : &c%erreur%&7."
+list-none: "&7&l« &e&lSH &8&l» &7SHFKey est actif pour tous les joueurs."
+list-header: "&7&l« &e&lSH &8&l» &7SHFKey désactivé pour &e%count% &7joueur(s) :"
+list-line: "&8• &e%player%"
+list-more: "&8• &7... et &e%count% &7autre(s)"
+
+# Mode réseau
 reseau-inactif: "&7&l« &e&lSH &8&l» &7Le mode réseau n'est &epas actif &7sur ce serveur."
 reseau-import: "&7&l« &a&lSH &8&l» &7Import terminé : &a%ajoutes% &7joueur(s) ajouté(s) à la base, &e%deja% &7déjà présent(s)."
 reseau-import-erreur: "&7&l« &c&lSH &8&l» &7Import impossible : &c%erreur%&7."

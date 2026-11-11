@@ -37,9 +37,21 @@ Sans SHNetwork, ou sans les clés `reseau` dans la configuration, le plugin se c
 
 ## Commandes
 
-| Commande | Alias | Description | Permission |
-|---|---|---|---|
-| `/shfkey` | — | Commande principale pour gérer SHFKey (`toggle <joueur>`, `import`) | `shfkey.admin` |
+Sans argument, `/shfkey` affiche les sous-commandes que l'expéditeur a le droit d'utiliser. Elle marche depuis la console.
+
+| Commande | Description | Permission |
+|---|---|---|
+| `/shfkey toggle <joueur>` | Active ou désactive SHFKey pour un joueur (même connecté à un autre serveur avec SHNetwork). | `shfkey.admin.toggle` |
+| `/shfkey list` | Joueurs pour qui SHFKey est désactivé : la table partagée avec SHNetwork, sinon `data.yml` (au plus `list-max` lignes). | `shfkey.admin.list` |
+| `/shfkey reload` | Relit `config.yml` (actions) et `messages.yml`. Si un fichier est invalide, l'ancienne configuration reste active ; `data.yml`, la base et la liste des joueurs désactivés ne sont pas touchés ; la section `reseau` n'est lue qu'au démarrage. | `shfkey.admin.reload` |
+| `/shfkey import` | Avec SHNetwork : reprend `data.yml` dans la base partagée. | `shfkey.admin.import` |
+
+## Permissions
+
+| Permission | Description | Par défaut |
+|---|---|---|
+| `shfkey.admin` | Toutes les commandes d'administration. | `op` |
+| `shfkey.admin.toggle` · `.list` · `.reload` · `.import` | Une permission par sous-commande. | `op` |
 
 ## Configuration
 

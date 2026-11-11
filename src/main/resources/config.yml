@@ -19,14 +19,23 @@
 #
 # Commandes :
 #   /shfkey toggle <joueur>   Active ou désactive SHFKey pour un joueur (même connecté à un autre serveur).
+#   /shfkey list              Joueurs pour qui SHFKey est désactivé (la base partagée avec SHNetwork, sinon data.yml).
+#   /shfkey reload            Relit config.yml (actions) et messages.yml. Si un fichier est invalide, l'ancienne configuration
+#                             reste active. data.yml, la base et la liste des joueurs désactivés ne sont pas touchés ;
+#                             la section 'reseau' n'est lue qu'au démarrage.
 #   /shfkey import            Mode réseau : reprend data.yml dans la base partagée (une seule fois).
+#   Sans argument, la commande affiche les sous-commandes que l'expéditeur a le droit d'utiliser. Elle marche depuis la console.
 #
-# Permission :
-#   shfkey.admin              Utiliser /shfkey.
+# Permissions :
+#   shfkey.admin              Toutes les commandes ci-dessus (op par défaut).
+#   shfkey.admin.toggle       /shfkey toggle (op par défaut).
+#   shfkey.admin.list         /shfkey list (op par défaut).
+#   shfkey.admin.reload       /shfkey reload (op par défaut).
+#   shfkey.admin.import       /shfkey import (op par défaut).
 #
 # Placeholder : %shfkey_is_enabled% = true / false.
 #
-# Les messages du mode réseau sont dans 'messages.yml'.
+# Les messages sont dans 'messages.yml'.
 #
 # ======================================================================== #
 
@@ -66,6 +75,9 @@ actions:
     region: "none"
     commands:
       - "spawn"
+
+# Nombre maximal de joueurs affichés par /shfkey list.
+list-max: 50
 
 # Mode réseau. Actif seulement si SHNetwork est installé et 'actif' vaut true : les joueurs pour qui SHFKey est
 # désactivé sont alors dans la base partagée (table shfkey_disabled : une ligne par joueur) et relus à l'arrivée du

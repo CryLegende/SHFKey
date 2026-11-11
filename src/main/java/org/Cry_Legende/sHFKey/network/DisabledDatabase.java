@@ -8,7 +8,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -97,6 +99,19 @@ public final class DisabledDatabase {
             }
             return true;
         }
+    }
+
+    /** Tous les joueurs pour qui SHFKey est désactivé (UUID en texte), pour /shfkey list. */
+    public List<String> listDisabled() throws SQLException {
+        List<String> players = new ArrayList<>();
+        try (Connection c = pool.getConnection();
+             PreparedStatement ps = c.prepareStatement("SELECT uuid FROM " + TABLE + " ORDER BY uuid");
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                players.add(rs.getString(1));
+            }
+        }
+        return players;
     }
 
     /** Ajoute les joueurs qui n'y sont pas déjà ; rend le nombre de lignes ajoutées. */

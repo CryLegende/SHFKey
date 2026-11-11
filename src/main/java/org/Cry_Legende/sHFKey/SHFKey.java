@@ -13,8 +13,9 @@ import org.Cry_Legende.sHFKey.network.ShNetworkLink;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
-import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabExecutor;
+import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
@@ -33,13 +34,14 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Level;
 
-public class SHFKey extends JavaPlugin implements Listener, CommandExecutor {
+public class SHFKey extends JavaPlugin implements Listener, TabExecutor {
     private RegionContainer regionContainer;
 
     // Gestion du data.yml
@@ -50,7 +52,8 @@ public class SHFKey extends JavaPlugin implements Listener, CommandExecutor {
     private final Set<String> disabledPlayers = Collections.synchronizedSet(new LinkedHashSet<>());
     // Non nul seulement avec SHNetwork : les joueurs désactivés vivent alors dans la base partagée
     private NetworkFKey network;
-    private YamlConfiguration messages;
+    // Remplacé par /shfkey reload
+    private volatile YamlConfiguration messages = new YamlConfiguration();
 
     @Override
     public void onEnable() {
@@ -65,6 +68,7 @@ public class SHFKey extends JavaPlugin implements Listener, CommandExecutor {
         // Events & Commandes
         getServer().getPluginManager().registerEvents(this, this);
         getCommand("shfkey").setExecutor(this);
+        getCommand("shfkey").setTabCompleter(this);
 
         // Hook WorldGuard
         initializeWorldGuard();
@@ -116,16 +120,64 @@ public class SHFKey extends JavaPlugin implements Listener, CommandExecutor {
         }
     }
 
-    /** messages.yml, avec les valeurs du jar pour toute clé absente du fichier du serveur. */
+    /** Lit messages.yml au démarrage. Illisible : les textes du jar sont utilisés et l'erreur est écrite dans la console. */
     private void loadMessages() {
+        try {
+            messages = readMessages();
+        } catch (IOException | InvalidConfigurationException e) {
+            getLogger().severe("messages.yml illisible, textes livrés utilisés : " + oneLine(e));
+            YamlConfiguration jar = new YamlConfiguration();
+            jar.setDefaults(jarMessages());
+            messages = jar;
+        }
+    }
+
+    /** messages.yml sans rien remplacer, avec les valeurs du jar pour toute clé absente du fichier du serveur. */
+    private YamlConfiguration readMessages() throws IOException, InvalidConfigurationException {
         File file = new File(getDataFolder(), "messages.yml");
         if (!file.exists()) saveResource("messages.yml", false);
-        messages = YamlConfiguration.loadConfiguration(file);
+        YamlConfiguration loaded = new YamlConfiguration();
+        loaded.load(file);
+        loaded.setDefaults(jarMessages());
+        return loaded;
+    }
+
+    private YamlConfiguration jarMessages() {
         try (InputStreamReader defaults = new InputStreamReader(Objects.requireNonNull(getResource("messages.yml")), StandardCharsets.UTF_8)) {
-            messages.setDefaults(YamlConfiguration.loadConfiguration(defaults));
+            return YamlConfiguration.loadConfiguration(defaults);
         } catch (Exception e) {
             getLogger().log(Level.WARNING, "messages.yml de référence illisible : " + e.getMessage());
+            return new YamlConfiguration();
         }
+    }
+
+    private static String oneLine(Exception e) {
+        String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+        return message.replaceAll("\\s*\\R\\s*", " ").trim();
+    }
+
+    /**
+     * Relit config.yml (actions) et messages.yml. Les deux fichiers sont lus avant de remplacer quoi que ce soit : si l'un
+     * est invalide, l'ancienne configuration reste active. data.yml, la base et la liste des joueurs désactivés ne sont pas
+     * touchés ; la section reseau n'est lue qu'au démarrage.
+     *
+     * @return null si tout est rechargé, sinon le fichier et l'erreur
+     */
+    private String reloadAll() {
+        try {
+            new YamlConfiguration().load(new File(getDataFolder(), "config.yml"));
+        } catch (IOException | InvalidConfigurationException e) {
+            return "config.yml : " + oneLine(e);
+        }
+        YamlConfiguration loaded;
+        try {
+            loaded = readMessages();
+        } catch (IOException | InvalidConfigurationException e) {
+            return "messages.yml : " + oneLine(e);
+        }
+        reloadConfig();
+        messages = loaded;
+        return null;
     }
 
     /** Texte de messages.yml, couleurs appliquées. */
@@ -191,8 +243,7 @@ public class SHFKey extends JavaPlugin implements Listener, CommandExecutor {
 
     /** Message de /shfkey toggle : le nouvel état de SHFKey pour le joueur visé. */
     private String toggleStatus(boolean nowEnabled, String playerName) {
-        String status = nowEnabled ? ChatColor.GREEN + "activé" : ChatColor.RED + "désactivé";
-        return ChatColor.YELLOW + "SHFKey a été " + status + ChatColor.YELLOW + " pour " + playerName;
+        return getMessage(nowEnabled ? "toggle-enabled" : "toggle-disabled").replace("%player%", playerName);
     }
 
     /** /shfkey toggle avec SHNetwork : le joueur peut être sur ce serveur ou sur un autre. */
@@ -205,7 +256,7 @@ public class SHFKey extends JavaPlugin implements Listener, CommandExecutor {
         }
         Optional<NetworkLink.Target> remote = network.find(targetName);
         if (remote.isEmpty()) {
-            sender.sendMessage(ChatColor.RED + "Joueur introuvable.");
+            sender.sendMessage(getMessage("player-not-found"));
             return;
         }
         String name = remote.get().name();
@@ -237,40 +288,125 @@ public class SHFKey extends JavaPlugin implements Listener, CommandExecutor {
 
     // --- COMMANDE ---
 
+    static final String TOGGLE_PERMISSION = "shfkey.admin.toggle";
+    static final String IMPORT_PERMISSION = "shfkey.admin.import";
+    static final String RELOAD_PERMISSION = "shfkey.admin.reload";
+    static final String LIST_PERMISSION = "shfkey.admin.list";
+
+    /** Sous-commandes que l'expéditeur peut utiliser ; l'import n'est proposé qu'avec SHNetwork. */
+    private List<String> allowed(CommandSender sender) {
+        List<String> subs = new ArrayList<>();
+        if (sender.hasPermission(TOGGLE_PERMISSION)) subs.add("toggle");
+        if (network != null && sender.hasPermission(IMPORT_PERMISSION)) subs.add("import");
+        if (sender.hasPermission(RELOAD_PERMISSION)) subs.add("reload");
+        if (sender.hasPermission(LIST_PERMISSION)) subs.add("list");
+        return subs;
+    }
+
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
-        if (!sender.hasPermission("shfkey.admin")) {
-            sender.sendMessage(ChatColor.RED + "Vous n'avez pas la permission.");
+        List<String> allowed = allowed(sender);
+        String sub = args.length == 0 ? "" : args[0].toLowerCase(Locale.ROOT);
+        // Sans réseau, l'import reste répondu (reseau-inactif) à qui a le droit de le demander
+        boolean importAsked = sub.equals("import") && sender.hasPermission(IMPORT_PERMISSION);
+        if (allowed.isEmpty() && !importAsked) {
+            sender.sendMessage(getMessage("no-permission"));
             return true;
         }
 
-        if (args.length == 1 && args[0].equalsIgnoreCase("import")) {
+        if (importAsked) {
             importDisabledPlayers(sender);
-            return true;
-        }
-
-        if (args.length == 2 && args[0].equalsIgnoreCase("toggle") && network != null) {
-            toggleOnNetwork(sender, args[1]);
-            return true;
-        }
-
-        if (args.length == 2 && args[0].equalsIgnoreCase("toggle")) {
-            Player target = Bukkit.getPlayer(args[1]);
-            if (target == null) {
-                sender.sendMessage(ChatColor.RED + "Joueur introuvable.");
-                return true;
+        } else if (sub.equals("reload") && allowed.contains("reload")) {
+            String error = reloadAll();
+            sender.sendMessage(error == null ? getMessage("reloaded") : getMessage("reload-failed").replace("%erreur%", error));
+        } else if (sub.equals("list") && allowed.contains("list")) {
+            listDisabled(sender);
+        } else if (sub.equals("toggle") && allowed.contains("toggle")) {
+            if (args.length < 2) {
+                sender.sendMessage(getMessage("usage-toggle"));
+            } else {
+                toggle(sender, args[1]);
             }
+        } else {
+            sender.sendMessage(getMessage("usage").replace("%subs%", String.join("|", allowed)));
+        }
+        return true;
+    }
 
-            boolean currentState = isPluginEnabledFor(target);
-            setPluginEnabledFor(target, !currentState);
-
-            String status = !currentState ? ChatColor.GREEN + "activé" : ChatColor.RED + "désactivé";
-            sender.sendMessage(ChatColor.YELLOW + "SHFKey a été " + status + ChatColor.YELLOW + " pour " + target.getName());
-            return true;
+    private void toggle(CommandSender sender, String targetName) {
+        if (network != null) {
+            toggleOnNetwork(sender, targetName);
+            return;
+        }
+        Player target = Bukkit.getPlayer(targetName);
+        if (target == null) {
+            sender.sendMessage(getMessage("player-not-found"));
+            return;
         }
 
-        sender.sendMessage(ChatColor.YELLOW + (network != null ? "Usage: /shfkey <toggle <joueur>|import>" : "Usage: /shfkey toggle <joueur>"));
-        return true;
+        boolean currentState = isPluginEnabledFor(target);
+        setPluginEnabledFor(target, !currentState);
+        sender.sendMessage(toggleStatus(!currentState, target.getName()));
+    }
+
+    /** /shfkey list : les joueurs pour qui SHFKey est désactivé (la base du réseau avec SHNetwork, sinon data.yml). */
+    private void listDisabled(CommandSender sender) {
+        if (network != null) {
+            network.listDisabled((uuids, error) -> getServer().getScheduler().runTask(this, () -> {
+                if (error != null) {
+                    sender.sendMessage(getMessage("reseau-erreur").replace("%erreur%", error));
+                } else {
+                    sendDisabledList(sender, uuids);
+                }
+            }));
+            return;
+        }
+        List<String> snapshot;
+        synchronized (disabledPlayers) {
+            snapshot = new ArrayList<>(disabledPlayers);
+        }
+        sendDisabledList(sender, snapshot);
+    }
+
+    private void sendDisabledList(CommandSender sender, List<String> uuids) {
+        if (uuids.isEmpty()) {
+            sender.sendMessage(getMessage("list-none"));
+            return;
+        }
+        int max = Math.max(1, getConfig().getInt("list-max", 50));
+        sender.sendMessage(getMessage("list-header").replace("%count%", String.valueOf(uuids.size())));
+        for (String text : uuids.subList(0, Math.min(max, uuids.size()))) {
+            sender.sendMessage(getMessage("list-line").replace("%player%", displayName(text)));
+        }
+        if (uuids.size() > max) {
+            sender.sendMessage(getMessage("list-more").replace("%count%", String.valueOf(uuids.size() - max)));
+        }
+    }
+
+    /** Pseudo d'un UUID connu du serveur (jamais de recherche Mojang), sinon l'UUID. */
+    private String displayName(String uuidText) {
+        try {
+            String name = Bukkit.getOfflinePlayer(UUID.fromString(uuidText)).getName();
+            return name == null ? uuidText : name;
+        } catch (IllegalArgumentException invalid) {
+            return uuidText;
+        }
+    }
+
+    @Override
+    public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
+        List<String> allowed = allowed(sender);
+        List<String> result = new ArrayList<>();
+        if (args.length == 1) {
+            result.addAll(allowed);
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("toggle") && allowed.contains("toggle")) {
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                result.add(player.getName());
+            }
+        }
+        String typed = args[args.length - 1].toLowerCase(Locale.ROOT);
+        result.removeIf(candidate -> !candidate.toLowerCase(Locale.ROOT).startsWith(typed));
+        return result;
     }
 
     // --- EVENTS ---
@@ -363,7 +499,7 @@ public class SHFKey extends JavaPlugin implements Listener, CommandExecutor {
 
         @Override
         public @NotNull String getVersion() {
-            return "1.0";
+            return plugin.getDescription().getVersion();
         }
 
         @Override

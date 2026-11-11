@@ -16,6 +16,7 @@ import java.nio.file.Path;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -143,6 +144,20 @@ public final class NetworkFKey implements Listener {
                 o.addProperty("disabled", nowDisabled);
                 link.publish(CHANNEL, o.toString());
                 done.accept(nowDisabled, null);
+            } catch (SQLException e) {
+                done.accept(null, e.getMessage());
+            }
+        });
+    }
+
+    /**
+     * Tous les joueurs désactivés de la base partagée (UUID en texte), pour /shfkey list. Tourne hors du fil principal ;
+     * {@code done} reçoit la liste ou le message d'erreur.
+     */
+    public void listDisabled(BiConsumer<List<String>, String> done) {
+        submit(() -> {
+            try {
+                done.accept(db.listDisabled(), null);
             } catch (SQLException e) {
                 done.accept(null, e.getMessage());
             }
