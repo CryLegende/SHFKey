@@ -41,37 +41,19 @@
 
 actions:
   staff:
-    permission: "shstaffrtp.use"
+    permission: "shfkey.staff"
     world: ["none"]
     region: "none"
     commands:
-      - "staffrtp"
+      - "tell %player% Action réservée au staff"
+  zoneSpawn:
+    permission: "none"
+    world: ["world"]
+    region: "spawn"
+    commands: []
   playerToSpawn:
     permission: "none"
-    world: ["SuperiorWorld"]
-    region: "none"
-    commands:
-      - "spawn"
-  1vs1:
-    permission: "none"
-    world: ["spawn"]
-    region: "1vs1"
-    commands: []
-  playerToIsland:
-    permission: "none"
-    world: ["spawn"]
-    region: "none"
-    commands:
-      - "is go"
-  playerToSpawnFromArena:
-    permission: "none"
-    world: ["arene"]
-    region: "none"
-    commands:
-      - "spawn"
-  playerToSpawnFromChristmas:
-    permission: "none"
-    world: ["Christmas"]
+    world: ["world_nether"]
     region: "none"
     commands:
       - "spawn"
@@ -89,8 +71,8 @@ reseau:
   # le joueur avant de relire son état
   attente-max-secondes: 10
   base-de-donnees:
-    url: "jdbc:mariadb://127.0.0.1:3306/bo_net"
-    utilisateur: shfkey
+    url: "jdbc:mariadb://127.0.0.1:3306/minecraft"
+    utilisateur: CHANGE_ME
     mot-de-passe: CHANGE_ME
     # Délai maximal de connexion et de réponse de la base, en millisecondes. Une base qui ne répond pas
     # laisse le joueur avec SHFKey actif.
